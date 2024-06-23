@@ -1,0 +1,4 @@
+Diagnostics:
+	Suppress: -Wsign-conversion
+Completions:
+	AllScopes: true

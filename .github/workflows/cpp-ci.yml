@@ -1,0 +1,60 @@
+name: C++ CI
+
+on:
+  pull_request:
+    branches:
+      - master
+    paths:
+      - '**.cpp'
+      - '**.h'
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Set up environment
+      run: |
+        echo "BRANCH_NAME=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}" >> $GITHUB_ENV
+
+        sudo apt-get update
+        sudo apt-get install -y clang-format cppcheck valgrind libgtest-dev cmake
+
+    - name: Install gtest
+      run: |
+        cd /usr/src/gtest
+        sudo cmake CmakeLists.txt
+        sudo make
+        sudo cp ./lib/*.a /usr/lib/
+
+    - name: Install cpplint
+      run: |
+        python3 -m pip install --upgrade pip
+        pip3 install cpplint
+
+    - name: Build with make
+      run: ls && make build
+      working-directory: ${{ env.BRANCH_NAME }}
+
+    - name: Check code format with clang-format
+      run: find . -iname "*.h" -o -iname "*.cpp" | xargs clang-format -i --Werror
+      working-directory: ${{ env.BRANCH_NAME }}
+
+    - name: Check with cpplint
+      run: cpplint --filter=-legal/copyright,-build/include_subdir --recursive . 
+      working-directory: ${{ env.BRANCH_NAME }}
+
+    - name: Check with cppcheck
+      run: cppcheck --enable=all --suppress=missingIncludeSystem . 
+      working-directory: ${{ env.BRANCH_NAME }}
+
+    - name: Run Test
+      run: make test
+      working-directory: ${{ env.BRANCH_NAME }}
+
+    - name: Run with valgrind
+      run: make memory
+      working-directory: ${{ env.BRANCH_NAME }}
