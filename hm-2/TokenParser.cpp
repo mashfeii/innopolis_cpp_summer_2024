@@ -18,6 +18,11 @@ void TokenParser::parse(const std::string& str) {
   size_t token_start = 0;
   size_t token_end = 0;
   size_t token_digits = 0;
+
+  if (startCallback) {
+    startCallback();
+  }
+
   auto is_sep = [](char symb) {
     return symb == ' ' || symb == '\n' || symb == '\t' || symb == '\0';
   };
@@ -50,10 +55,6 @@ void TokenParser::parse(const std::string& str) {
 
       token_digits = 0;
     }
-  }
-
-  if (startCallback) {
-    startCallback();
   }
 
   if (endCallback) {
