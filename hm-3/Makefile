@@ -1,25 +1,36 @@
-TARGET=main.out
-CXX=g++
-CXXFLAGS=-std=c++20 -Wall 
+TARGET=big_int.out
 
-SOURCES=$(wildcard *.cpp)
+CXX=g++
+CXXFLAGS :=-std=c++20 -Wall -g -Wextra -Wsign-conversion
+GTESTFLAGS=-lgtest_main -lgtest -lpthread
+
+SOURCES=BigInt.cpp main.cpp
 OBJECTS=$(SOURCES:.cpp=.o)
 
-MEM_OPTS=--leak-check=full --show-leak-kinds=all --track-origins=yes
+VALGRIND_OPTS=--leak-check=full --show-leak-kinds=all --track-origins=yes
 
-all: $(TARGET)
+all: test
 
+build: $(TARGET)
 $(TARGET): $(OBJECTS)
 	$(CXX) -o $@ $^
-
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-run: $(TARGET)
+run: build
 	./$(TARGET)
 
-memory: $(TARGET)
-	valgrind $(MEM_OPTS) ./$(TARGET)
+test: BigIntTest.o BigInt.o
+	$(CXX) $(CXXFLAGS) -o Test.out BigIntTest.o BigInt.o $(GTESTFLAGS)
+	./Test.out
+BigIntTest.o: BigIntTest.cpp BigInt.hpp
+	$(CXX) $(CXXFLAGS) -c BigIntTest.cpp
+BigInt.o: BigInt.cpp BigInt.hpp
+	$(CXX) $(CXXFLAGS) -c BigInt.cpp
 
+memory: build
+	valgrind $(VALGRIND_OPTS) ./$(TARGET)
+st_memory:
+	cppcheck $(SOURCES)
 clean:
-	rm -f *.o $(TARGET)
+	rm -f *.o $(TARGET) Test.out
