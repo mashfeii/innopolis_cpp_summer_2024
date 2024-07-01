@@ -6,9 +6,9 @@
 
 class BigInt {
  private:
-  uint16_t base_ = 10;
-  uint16_t* num_ = nullptr;
   size_t sz_ = 0;
+  uint16_t* num_ = nullptr;
+  bool sign_ = false;
 
  public:
   // Rule of 5
@@ -33,6 +33,9 @@ class BigInt {
 
   BigInt operator*(const BigInt&) const;
   BigInt operator*(uint32_t) const;
+
+  uint16_t& operator[](size_t);
+  uint16_t operator[](size_t) const;
 
   // Comparison operations
   friend bool operator<(const BigInt& lhs, const BigInt& rhs);
