@@ -23,16 +23,19 @@ class BigInt {
   BigInt(const std::string&);
   BigInt(uint32_t);
 
-  // Unary arithmetic operations
-  // methods are const since we return brand new instance
-  BigInt operator-(const BigInt&) const;
-  BigInt operator-(uint32_t) const;
+  // Unary operator
+  BigInt operator-() const;
 
-  BigInt operator+(const BigInt&) const;
-  BigInt operator+(uint32_t) const;
+  // Arithmetic operations
+  // all friends to handle both left/right cases
+  friend BigInt operator-(const BigInt&, const BigInt&);
+  friend BigInt operator-(const BigInt&, uint32_t);
 
-  BigInt operator*(const BigInt&) const;
-  BigInt operator*(uint32_t) const;
+  friend BigInt operator+(const BigInt&, const BigInt&);
+  friend BigInt operator+(const BigInt&, uint32_t);
+
+  friend BigInt operator*(const BigInt&, const BigInt&);
+  friend BigInt operator*(const BigInt&, uint32_t);
 
   uint16_t& operator[](size_t);
   uint16_t operator[](size_t) const;
@@ -45,7 +48,7 @@ class BigInt {
   friend bool operator<=(const BigInt& lhs, const BigInt& rhs);
   friend bool operator>=(const BigInt& lhs, const BigInt& rhs);
 
-  size_t size();
+  size_t size() const;
   // Output
   friend std::ostream& operator<<(std::ostream&, const BigInt&);
 };

@@ -20,6 +20,9 @@ $(TARGET): $(OBJECTS)
 run: build
 	./$(TARGET)
 
+debug: build
+	gdb ./$(TARGET)
+
 test: BigIntTest.o BigInt.o
 	$(CXX) $(CXXFLAGS) -o Test.out BigIntTest.o BigInt.o $(GTESTFLAGS)
 	./Test.out
