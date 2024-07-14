@@ -1,6 +1,12 @@
+#pragma once
+
+#include <bits/stl_tree.h>
+#include <algorithm>
 #include <cstdint>
 #include <functional>
 #include <initializer_list>
+#include <ios>
+#include <utility>
 
 template <typename Key,
           typename T,
@@ -9,28 +15,75 @@ template <typename Key,
 class avl {
  private:
   using key_type = Key;
-  using value_type = T;
-  // Internal structures
-  class Node {
-   private:
-    using pointer_type = Node*;
+  using mapped_type = T;
+  using value_type = std::pair<const Key, T>;
+  using reference = value_type&;
+  using const_reference = const value_type&;
+  using size_type = size_t;
+  Allocator alloc;
 
-    key_type key_;
-    value_type value_;
-    int16_t height_;
-    pointer_type left_child;
-    pointer_type right_child;
-    pointer_type parent;
+  // Internal structures
+  struct node {
+    value_type value;
+    int16_t height = 1;
+    node* left_child = nullptr;
+    node* right_child = nullptr;
+    node* parent = nullptr;
 
    public:
-    Node(key_type, value_type);
+    node(key_type key, value_type value) : value(std::make_pair(key, value)) {};
+    node(value_type value) : value(value) {};
 
-    int16_t getBalance();
-    value_type getValue();
-    int16_t updateHeight();
+    int16_t getBalance() {
+      int16_t result;
 
-    pointer_type setLeftChild(pointer_type left_child);
-    pointer_type setRightChild(pointer_type right_child);
+      if (!left_child) {
+        if (!right_child) {
+          result = 0;
+        } else {
+          result = -right_child->height - 1;
+        }
+      } else if (!right_child) {
+        result = left_child->height + 1;
+      } else {
+        result = left_child->height - right_child->height;
+      }
+
+      return result;
+    };
+
+    int16_t updateHeight() {
+      if (!left_child) {
+        if (!right_child) {
+          height = 0;
+        } else {
+          height = right_child->height + 1;
+        }
+      } else if (!right_child) {
+        height = left_child->height + 1;
+      } else {
+        height = right_child->height + 1;
+      }
+
+      return height;
+    };
+
+    node* setLeftChild(node* new_left_child) {
+      if (new_left_child != nullptr) {
+        new_left_child->parent = this;
+      }
+      left_child = new_left_child;
+      updateHeight();
+      return left_child;
+    };
+    node* setRightChild(node* new_right_child) {
+      if (new_right_child != nullptr) {
+        new_right_child->parent = this;
+      }
+      right_child = new_right_child;
+      updateHeight();
+      return right_child;
+    };
   };
   template <bool IsConst>
   class base_iterator {
@@ -57,42 +110,98 @@ class avl {
     base_iterator(T* ptr) : ptr(ptr) {};
     friend class avl<Key, T>;
   };
-  // Bunch of usings
-  using type = Node;
-  using reference = Node&;
-  using const_reference = const Node&;
-  using pointer_type = Node*;
+
+  using pointer_type = node*;
   using iterator = base_iterator<false>;
   using const_iterator = base_iterator<true>;
   using reverse_iterator = std::reverse_iterator<iterator>;
   using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
   // Root of the tree
-  pointer_type root;
+  pointer_type root = nullptr;
 
   // Private methods for self-balancing
-  void balanceTree(pointer_type node);
-  void leftRotate(pointer_type node);
-  void rightRotate(pointer_type node);
+  void balanceTree(pointer_type node) {
+    int16_t node_balance = node->getBalance();
+    if (node_balance > 1) {
+      if (node->getLeftChild()->getBalance() < 0) {
+        leftRotate(node->getLeftChild());
+      }
+      rightRotate(node);
+    } else if (node_balance < -1) {
+      if (node->getRightChild()->getBalance() > 0) {
+        rightRotate(node->getRightChild());
+      }
+      leftRotate(node);
+    }
+  };
+  void leftRotate(pointer_type node) {
+    pointer_type temp = node->right_child;
+    node->right_child = temp->left_child;
+
+    if (temp->left_child) {
+      temp->left_child->parent = node;
+    }
+    if (!node->parent) {
+      root = temp;
+      temp->parent = nullptr;
+    } else if (node->parent->left == node) {
+      node->parent->left = temp;
+    } else {
+      node->parent->right = temp;
+    }
+
+    temp->left = node;
+    node->parent = temp;
+  };
+  void rightRotate(pointer_type node) {
+    pointer_type temp = node->left_child;
+    node->left_child = temp->right_child;
+
+    if (!node->parent) {
+      root = temp;
+      temp->parent = nullptr;
+    } else if (node->parent->left_child == node) {
+      node->parent->left_child = temp;
+    } else {
+      node->parent->right_child = temp;
+    }
+
+    temp->right = node;
+    node->parent = temp;
+  };
   void setRoot(pointer_type node);
 
  public:
-  avl();
-  avl(std::pair<key_type, value_type>);
-  avl(std::initializer_list<std::pair<key_type, value_type>>);
+  avl() = default;
+  avl(std::initializer_list<value_type> values) {
+    for (auto iter = values.begin(); iter != values.end(); ++iter) {
+      insert(node(*iter));
+    }
+  };
+  ~avl() {
+    for (auto iter = begin(); iter != end(); ++iter) {
+      alloc.destroy(*iter);
+      alloc.deallocate(*iter);
+    }
+  };
 
-  reference at(Key);
-  type at(Key) const;
+  T& at(const Key& key);
+  const T& at(const Key& key) const;
 
-  pointer_type insert(key_type key, value_type value);
-  pointer_type insert(std::pair<key_type, value_type> node);
+  std::pair<iterator, bool> insert(const value_type& value);
 
-  void erase(key_type key);
-  reference find(key_type key);
-  type find(key_type key) const;
-  bool contains(key_type key) const;
+  iterator erase(const Key& key);
+
+  iterator find(const Key& key);
+  const_iterator find(const Key& key) const;
+
+  bool contains(const Key& key) const;
+
   bool empty() const;
-  size_t size() const;
+  size_type size() const;
+
+  T& operator[](const Key& key);
 
   iterator begin() { return {}; }
   iterator end() { return {}; }
