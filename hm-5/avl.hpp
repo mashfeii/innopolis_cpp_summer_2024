@@ -1,11 +1,11 @@
 #pragma once
 
-#include <bits/stl_tree.h>
-#include <algorithm>
 #include <cstdint>
 #include <functional>
 #include <initializer_list>
-#include <ios>
+#include <iostream>
+#include <ostream>
+#include <stdexcept>
 #include <utility>
 
 template <typename Key,
@@ -19,77 +19,35 @@ class avl {
   using value_type = std::pair<const Key, T>;
   using reference = value_type&;
   using const_reference = const value_type&;
-  using size_type = size_t;
+  using size_type = int16_t;
   Allocator alloc;
 
   // Internal structures
   struct node {
-    value_type value;
+    const key_type first;
+    mapped_type second;
     int16_t height = 1;
-    node* left_child = nullptr;
-    node* right_child = nullptr;
+    node* left = nullptr;
+    node* right = nullptr;
     node* parent = nullptr;
 
-   public:
-    node(key_type key, value_type value) : value(std::make_pair(key, value)) {};
-    node(value_type value) : value(value) {};
+    node(key_type key, mapped_type value) : first(key), second(value) {};
+    node(value_type value) : first(value.first), second(value.second) {};
 
-    int16_t getBalance() {
-      int16_t result;
-
-      if (!left_child) {
-        if (!right_child) {
-          result = 0;
-        } else {
-          result = -right_child->height - 1;
-        }
-      } else if (!right_child) {
-        result = left_child->height + 1;
-      } else {
-        result = left_child->height - right_child->height;
-      }
-
-      return result;
-    };
-
-    int16_t updateHeight() {
-      if (!left_child) {
-        if (!right_child) {
-          height = 0;
-        } else {
-          height = right_child->height + 1;
-        }
-      } else if (!right_child) {
-        height = left_child->height + 1;
-      } else {
-        height = right_child->height + 1;
-      }
-
-      return height;
-    };
-
-    node* setLeftChild(node* new_left_child) {
-      if (new_left_child != nullptr) {
-        new_left_child->parent = this;
-      }
-      left_child = new_left_child;
-      updateHeight();
-      return left_child;
-    };
-    node* setRightChild(node* new_right_child) {
-      if (new_right_child != nullptr) {
-        new_right_child->parent = this;
-      }
-      right_child = new_right_child;
-      updateHeight();
-      return right_child;
-    };
+    bool operator<(const node& node) { return first < node.first; }
+    bool operator>(const node& node) { return first < first; }
+    bool operator==(const node& node) { return first == node.first; }
+    friend std::ostream& operator<<(std::ostream& os, const node& node) {
+      os << "key: " << node.first << ", value: " << node.second;
+      return os;
+    }
   };
+
   template <bool IsConst>
   class base_iterator {
    public:
-    using pointer_type = std::conditional_t<IsConst, const T*, T*>;
-    using reference_type = std::conditional_t<IsConst, const T&, T&>;
+    using pointer_type = std::conditional_t<IsConst, const node*, node*>;
+    using reference_type = std::conditional_t<IsConst, const node&, node&>;
     using value_type = T;
 
     base_iterator(const base_iterator&) = default;
@@ -99,16 +57,64 @@ class avl {
     pointer_type operator->() const { return ptr; }
 
     base_iterator& operator++() {
-      ++ptr;
+      increment();
       return *this;
     }
-    base_iterator operator++(int) { base_iterator copy = *this; }
+    base_iterator operator++(int) {
+      base_iterator copy = *this;
+      increment();
+      return copy;
+    }
+    base_iterator& operator--() {
+      decrement();
+      return *this;
+    }
+    base_iterator operator--(int) {
+      base_iterator copy = *this;
+      decrement();
+      return copy;
+    }
     operator base_iterator<true>() const { return {ptr}; }
+    operator bool() const { return ptr; }
+    bool operator==(const base_iterator& iter) { return ptr == iter.ptr; }
+    bool operator!=(const base_iterator& iter) { return ptr != iter.ptr; }
 
    private:
-    pointer_type ptr;
-    base_iterator(T* ptr) : ptr(ptr) {};
+    node* ptr;
+    base_iterator(node* ptr) : ptr(ptr) {};
     friend class avl<Key, T>;
+
+    void decrement() {
+      if (ptr->right) {
+        ptr = ptr->right;
+        while (ptr->left)
+          ptr = ptr->left;
+      } else {
+        node* y = ptr->parent;
+        while (ptr == y->right) {
+          ptr = y;
+          y = y->parent;
+        }
+        if (ptr->right != y)
+          ptr = y;
+      }
+    }
+
+    void increment() {
+      if (ptr->right) {
+        ptr = ptr->right;
+        while (ptr->left)
+          ptr = ptr->left;
+      } else {
+        node* y = ptr->parent;
+        while (ptr == y->right) {
+          ptr = y;
+          y = y->parent;
+        }
+        if (ptr->right != y)
+          ptr = y;
+      }
+    }
   };
 
   using pointer_type = node*;
@@ -118,33 +124,56 @@ class avl {
   using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
   // Root of the tree
+  pointer_type super_root;
   pointer_type root = nullptr;
+  size_type size_ = 0;
+
+  int16_t height(pointer_type node) { return (node) ? node->height : 0; }
+
+  int16_t balancefactor(pointer_type node) {
+    return height(node->right) - height(node->left);
+  }
+
+  void heightfix(pointer_type node) {
+    int16_t left_height = height(node->left);
+    int16_t right_height = height(node->right);
+
+    node->height = std::max(left_height, right_height) + 1;
+  }
 
   // Private methods for self-balancing
-  void balanceTree(pointer_type node) {
-    int16_t node_balance = node->getBalance();
-    if (node_balance > 1) {
-      if (node->getLeftChild()->getBalance() < 0) {
-        leftRotate(node->getLeftChild());
-      }
-      rightRotate(node);
-    } else if (node_balance < -1) {
-      if (node->getRightChild()->getBalance() > 0) {
-        rightRotate(node->getRightChild());
-      }
-      leftRotate(node);
-    }
-  };
-  void leftRotate(pointer_type node) {
-    pointer_type temp = node->right_child;
-    node->right_child = temp->left_child;
+  pointer_type balance(pointer_type node) {
+    heightfix(node);
 
-    if (temp->left_child) {
-      temp->left_child->parent = node;
+    if (balancefactor(node) == 2) {
+      if (balancefactor(node->right) < 0) {
+        node->right = rightrotate(node->right);
+      }
+      return leftrotate(node);
+    }
+    if (balancefactor(node) == -2) {
+      if (balancefactor(node->left) > 0) {
+        node->left = leftrotate(node->left);
+      }
+      return rightrotate(node);
+    }
+    return node;
+  };
+  pointer_type leftrotate(pointer_type node) {
+    pointer_type temp = node->right;
+    node->right = temp->left;
+
+    if (node->right) {
+      node->right->parent = node;
+    }
+
+    if (temp->left) {
+      temp->left->parent = node;
     }
     if (!node->parent) {
       root = temp;
-      temp->parent = nullptr;
+      super_root->left = root;
+      temp->parent = super_root;
     } else if (node->parent->left == node) {
       node->parent->left = temp;
     } else {
@@ -153,60 +182,223 @@ class avl {
 
     temp->left = node;
     node->parent = temp;
-  };
-  void rightRotate(pointer_type node) {
-    pointer_type temp = node->left_child;
-    node->left_child = temp->right_child;
 
-    if (!node->parent) {
+    heightfix(node);
+    heightfix(temp);
+
+    return temp;
+  };
+  pointer_type rightrotate(pointer_type node) {
+    pointer_type temp = node->left;
+    node->left = temp->right;
+
+    if (node->left) {
+      node->left->parent = node;
+    }
+
+    if (!node->parent || node->parent == super_root) {
       root = temp;
-      temp->parent = nullptr;
-    } else if (node->parent->left_child == node) {
-      node->parent->left_child = temp;
+      super_root->left = root;
+      temp->parent = super_root;
+    } else if (node->parent->left == node) {
+      node->parent->left = temp;
     } else {
-      node->parent->right_child = temp;
+      node->parent->right = temp;
     }
 
     temp->right = node;
     node->parent = temp;
+
+    heightfix(node);
+    heightfix(temp);
+
+    return temp;
   };
-  void setRoot(pointer_type node);
+
+  pointer_type insert_helper(pointer_type current_node,
+                             const value_type& value) {
+    if (!current_node) {
+      return new node(value);
+    }
+    if (value.first < current_node->first) {
+      pointer_type left_child = insert_helper(current_node->left, value);
+      current_node->left = left_child;
+      left_child->parent = current_node;
+    } else if (value.first > current_node->first) {
+      pointer_type right_child = insert_helper(current_node->right, value);
+      current_node->right = right_child;
+      right_child->parent = current_node;
+    };
+
+    return balance(current_node);
+  }
+
+  void inorder_helper(pointer_type node) {
+    if (node != nullptr) {
+      inorder_helper(node->left);
+      std::cout << "Node : " << node->first << std::endl;
+      if (node->parent == nullptr)
+        std::cout << "Parent : NULL \n";
+      else
+        std::cout << "Parent : " << node->parent->first << std::endl;
+      inorder_helper(node->right);
+    }
+  }
+
+  pointer_type successor(pointer_type node) {
+    pointer_type temp = node;
+
+    while (temp->left) {
+      temp = temp->left;
+    }
+    return temp;
+  }
+  pointer_type extractmin(pointer_type node) {
+    if (!node->left) {
+      return node->right;
+    }
+    node->left = extractmin(node->left);
+    return balance(node);
+  }
+  pointer_type erase_helper(pointer_type node, const Key& key) {
+    if (!node) {
+      return nullptr;
+    }
+    if (key < node->first) {
+      pointer_type left_child = erase_helper(node->left, key);
+      node->left = left_child;
+      left_child->parent = node;
+    } else if (key > node->first) {
+      pointer_type right_child = erase_helper(node->right, key);
+      node->right = right_child;
+      right_child->parent = node;
+    } else {
+      pointer_type l = node->left;
+      pointer_type r = node->right;
+      pointer_type p = node->parent;
+      delete node;
+
+      if (!r) {
+        return l;
+      }
+
+      pointer_type inorder_successor = successor(r);
+      pointer_type temp = extractmin(r);
+
+      inorder_successor->right = temp;
+      inorder_successor->left = l;
+      inorder_successor->parent = p;
+
+      if (temp) {
+        temp->parent = inorder_successor;
+      }
+      if (l) {
+        l->parent = inorder_successor;
+      }
+      if (!inorder_successor->parent) {
+        root = inorder_successor;
+      }
+
+      return balance(inorder_successor);
+    }
+
+    return balance(node);
+  }
 
  public:
-  avl() = default;
-  avl(std::initializer_list<value_type> values) {
+  avl() : super_root(new node(key_type(), mapped_type())) {};
+  avl(std::initializer_list<value_type> values)
+      : super_root(new node(key_type(), mapped_type())) {
     for (auto iter = values.begin(); iter != values.end(); ++iter) {
-      insert(node(*iter));
+      insert(*iter);
     }
   };
   ~avl() {
-    for (auto iter = begin(); iter != end(); ++iter) {
-      alloc.destroy(*iter);
-      alloc.deallocate(*iter);
-    }
+    // for (auto iter = begin(); iter != end(); ++iter) {
+    //   alloc.destroy(*iter);
+    //   alloc.deallocate(*iter);
+    // }
   };
 
-  T& at(const Key& key);
-  const T& at(const Key& key) const;
+  void inorder() { inorder_helper(root); }
 
-  std::pair<iterator, bool> insert(const value_type& value);
+  T& at(const Key& key) {
+    pointer_type node = find(key);
+    if (!node) {
+      throw std::out_of_range("No element with such key");
+    }
+    return node->second;
+  };
+  const T& at(const Key& key) const {
+    pointer_type node = find(key);
+    if (!node) {
+      throw std::out_of_range("No element with such key");
+    }
+    return node->getConstValue();
+  };
 
-  iterator erase(const Key& key);
+  pointer_type insert(const value_type& value) {
+    ++size_;
+    if (!root) {
+      root = new node(value);
+      super_root->left = root;
+      root->parent = super_root;
+      return root;
+    }
 
-  iterator find(const Key& key);
-  const_iterator find(const Key& key) const;
+    return insert_helper(root, value);
+  }
 
-  bool contains(const Key& key) const;
+  pointer_type erase(const Key& key) {
+    if (empty()) {
+      throw std::runtime_error("The tree is empty");
+    }
+    if (!contains(key)) {
+      throw std::runtime_error("Element with such key is not in the tree");
+    }
 
-  bool empty() const;
-  size_type size() const;
+    --size_;
+    return erase_helper(root, key);
+  };
 
-  T& operator[](const Key& key);
+  iterator find(const Key& key) {
+    pointer_type temp = root;
 
-  iterator begin() { return {}; }
-  iterator end() { return {}; }
-  const_iterator begin() const { return {}; }
-  const_iterator end() const { return {}; }
-  reverse_iterator rbegin() const { return {}; }
-  reverse_iterator rend() const { return {}; }
+    while (temp != nullptr) {
+      if (key < temp->first) {
+        temp = temp->left;
+      } else if (key > temp->first) {
+        temp = temp->right;
+      } else {
+        return iterator(temp);
+      }
+    }
+
+    return nullptr;
+  };
+  const_iterator find(const Key& key) const {
+    return const_iterator(find(key));
+  };
+
+  bool contains(const Key& key) { return find(key) != nullptr; };
+
+  bool empty() const { return !root; };
+  size_type size() const { return size_; };
+  size_type height() const { return root->height; };
+
+  T& operator[](const Key& key) {
+    iterator node = find(key);
+    if (!node) {
+      insert(value_type(key, T()));
+      node = find(key);
+    }
+    return node->second;
+  };
+
+  iterator begin() { return {successor(root)}; }
+  iterator end() { return {super_root}; }
+  const_iterator begin() const { return {successor(root)}; }
+  const_iterator end() const { return {super_root}; }
+  reverse_iterator rbegin() const { return {successor(root)}; }
+  reverse_iterator rend() const { return {super_root}; }
 };
