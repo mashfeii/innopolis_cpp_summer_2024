@@ -1,9 +1,12 @@
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 #include <functional>
 #include <initializer_list>
 #include <iostream>
+#include <iterator>
+#include <memory>
 #include <ostream>
 #include <stdexcept>
 #include <utility>
@@ -19,14 +22,14 @@ class avl {
   using value_type = std::pair<const Key, T>;
   using reference = value_type&;
   using const_reference = const value_type&;
-  using size_type = int16_t;
+  using size_type = int32_t;
   Allocator alloc;
 
   // Internal structures
   struct node {
     const key_type first;
     mapped_type second;
-    int16_t height = 1;
+    size_type height = 1;
     node* left = nullptr;
     node* right = nullptr;
     node* parent = nullptr;
@@ -38,10 +41,13 @@ class avl {
     bool operator>(const node& node) { return first < first; }
     bool operator==(const node& node) { return first == node.first; }
     friend std::ostream& operator<<(std::ostream& os, const node& node) {
-      os << "key: " << node.first << ", value: " << node.second;
+      os << node.second;
       return os;
     }
   };
+
+  typename std::allocator_traits<Allocator>::template rebind_alloc<node>
+      node_alloc;
 
   template <bool IsConst>
   class base_iterator {
@@ -85,17 +91,17 @@ class avl {
     friend class avl<Key, T>;
 
     void decrement() {
-      if (ptr->right) {
-        ptr = ptr->right;
-        while (ptr->left)
-          ptr = ptr->left;
+      if (ptr->left) {
+        ptr = ptr->left;
+        while (ptr->right)
+          ptr = ptr->right;
       } else {
         node* y = ptr->parent;
-        while (ptr == y->right) {
+        while (ptr == y->left) {
           ptr = y;
           y = y->parent;
         }
-        if (ptr->right != y)
+        if (ptr->left != y)
           ptr = y;
       }
     }
@@ -121,22 +127,23 @@ class avl {
   using iterator = base_iterator<false>;
   using const_iterator = base_iterator<true>;
   using reverse_iterator = std::reverse_iterator<iterator>;
-  using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
   // Root of the tree
   pointer_type super_root;
   pointer_type root = nullptr;
   size_type size_ = 0;
 
-  int16_t height(pointer_type node) { return (node) ? node->height : 0; }
+  size_type height(pointer_type node) {
+    return node == nullptr ? 0 : node->height;
+  }
 
-  int16_t balancefactor(pointer_type node) {
+  size_type balancefactor(pointer_type node) {
     return height(node->right) - height(node->left);
   }
 
   void heightfix(pointer_type node) {
-    int16_t left_height = height(node->left);
-    int16_t right_height = height(node->right);
+    size_type left_height = height(node->left);
+    size_type right_height = height(node->right);
 
     node->height = std::max(left_height, right_height) + 1;
   }
@@ -170,7 +177,7 @@ class avl {
     if (temp->left) {
       temp->left->parent = node;
     }
-    if (!node->parent) {
+    if (!node->parent || node->parent == super_root) {
       root = temp;
       super_root->left = root;
       temp->parent = super_root;
@@ -218,7 +225,9 @@ class avl {
   pointer_type insert_helper(pointer_type current_node,
                              const value_type& value) {
     if (!current_node) {
-      return new node(value);
+      pointer_type new_node = node_alloc.allocate(1);
+      new (new_node) node(value);
+      return new_node;
     }
     if (value.first < current_node->first) {
       pointer_type left_child = insert_helper(current_node->left, value);
@@ -231,18 +240,6 @@ class avl {
     };
 
     return balance(current_node);
-  }
-
-  void inorder_helper(pointer_type node) {
-    if (node != nullptr) {
-      inorder_helper(node->left);
-      std::cout << "Node : " << node->first << std::endl;
-      if (node->parent == nullptr)
-        std::cout << "Parent : NULL \n";
-      else
-        std::cout << "Parent : " << node->parent->first << std::endl;
-      inorder_helper(node->right);
-    }
   }
 
   pointer_type successor(pointer_type node) {
@@ -276,7 +273,10 @@ class avl {
       pointer_type l = node->left;
       pointer_type r = node->right;
       pointer_type p = node->parent;
-      delete node;
+
+      std::destroy_at(node);
+      node_alloc.deallocate(node, 1);
+      node = nullptr;
 
       if (!r) {
         return l;
@@ -295,7 +295,8 @@ class avl {
       if (l) {
         l->parent = inorder_successor;
       }
-      if (!inorder_successor->parent) {
+      if (!inorder_successor->parent ||
+          inorder_successor->parent == super_root) {
         root = inorder_successor;
       }
 
@@ -305,42 +306,63 @@ class avl {
     return balance(node);
   }
 
+  pointer_type maximum() {
+    node* temp = root;
+    while (temp->right) {
+      temp = temp->right;
+    }
+    return temp;
+  }
+  void destroy(pointer_type node) {
+    if (node) {
+      destroy(node->left);
+      destroy(node->right);
+
+      std::destroy_at(node);
+      node_alloc.deallocate(node, 1);
+    }
+  }
+
  public:
-  avl() : super_root(new node(key_type(), mapped_type())) {};
-  avl(std::initializer_list<value_type> values)
-      : super_root(new node(key_type(), mapped_type())) {
+  avl() {
+    pointer_type new_node = node_alloc.allocate(1);
+    new (new_node) node(key_type(), mapped_type());
+    super_root = new_node;
+  };
+  avl(std::initializer_list<value_type> values) {
+    pointer_type new_node = node_alloc.allocate(1);
+    new (new_node) node(key_type(), mapped_type());
+    super_root = new_node;
+
     for (auto iter = values.begin(); iter != values.end(); ++iter) {
       insert(*iter);
     }
   };
-  ~avl() {
-    // for (auto iter = begin(); iter != end(); ++iter) {
-    //   alloc.destroy(*iter);
-    //   alloc.deallocate(*iter);
-    // }
-  };
 
-  void inorder() { inorder_helper(root); }
+  ~avl() { destroy(super_root); };
 
   T& at(const Key& key) {
-    pointer_type node = find(key);
+    iterator node = find(key);
     if (!node) {
       throw std::out_of_range("No element with such key");
     }
     return node->second;
   };
   const T& at(const Key& key) const {
-    pointer_type node = find(key);
+    iterator node = find(key);
     if (!node) {
       throw std::out_of_range("No element with such key");
     }
-    return node->getConstValue();
+    return node->second;
   };
 
   pointer_type insert(const value_type& value) {
     ++size_;
     if (!root) {
-      root = new node(value);
+      pointer_type new_node = node_alloc.allocate(1);
+      new (new_node) node(value);
+      root = new_node;
+
       super_root->left = root;
       root->parent = super_root;
       return root;
@@ -384,7 +406,7 @@ class avl {
 
   bool empty() const { return !root; };
   size_type size() const { return size_; };
-  size_type height() const { return root->height; };
+  size_type height() const { return root ? root->height : 0; };
 
   T& operator[](const Key& key) {
     iterator node = find(key);
@@ -395,10 +417,17 @@ class avl {
     return node->second;
   };
 
+  void clear() {
+    destroy(super_root);
+    super_root = nullptr;
+    root = nullptr;
+    size_ = 0;
+  }
+
   iterator begin() { return {successor(root)}; }
   iterator end() { return {super_root}; }
-  const_iterator begin() const { return {successor(root)}; }
-  const_iterator end() const { return {super_root}; }
-  reverse_iterator rbegin() const { return {successor(root)}; }
-  reverse_iterator rend() const { return {super_root}; }
+  // const_iterator begin() const { return {successor(root)}; }
+  // const_iterator end() const { return {super_root}; }
+  reverse_iterator rbegin() { return reverse_iterator(end()); }
+  reverse_iterator rend() { return reverse_iterator(begin()); }
 };
