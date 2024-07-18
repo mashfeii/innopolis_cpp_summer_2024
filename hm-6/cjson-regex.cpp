@@ -8,13 +8,13 @@
 #include <string>
 
 /*
-==== default json.dumps: 0.995832827 s
-==== pip ujson.dumps: 0.65685948 s
-==== module cjson.dumps: 0.931668499 s
----------------------------------------
-==== default json.loads: 0.000251721 s
-==== pip ujson.loads: 0.000202194 s
-==== module cjson.loads: 0.001716757 s
+==== default json.dumps: 1.033467625 s
+==== pip ujson.dumps: 0.662644717 s
+==== module cjson.dumps: 0.913741218 s
+-----------------------------------------
+==== default json.loads: 0.000244451 s
+==== pip ujson.loads: 0.000173868 s
+==== module cjson.loads: 0.001335794 s
 */
 
 static PyObject* cjson_loads(PyObject* self, PyObject* args) {
@@ -24,7 +24,7 @@ static PyObject* cjson_loads(PyObject* self, PyObject* args) {
     std::cerr << "Failed to parse argument" << std::endl;
     return nullptr;
   }
-  std::string json_string{buffer};
+  std::string s{buffer};
 
   PyObject* dict = nullptr;
   if (!(dict = PyDict_New())) {
@@ -33,45 +33,35 @@ static PyObject* cjson_loads(PyObject* self, PyObject* args) {
   }
 
   std::regex expression("\"([A-Za-z]*)\"\\s*:\\s*(\"?\\w*\"?)\\s*[},]?\\s*");
-  std::smatch match;
+  for (std::smatch m; std::regex_search(s, m, expression); s = m.suffix()) {
+    PyObject* key = NULL;
+    std::string key_string = m[1].str();
 
-  auto words_begin = std::sregex_iterator(json_string.begin(), json_string.end(), expression);
-  auto words_end = std::sregex_iterator();
+    if (!(key = Py_BuildValue("s", key_string.c_str()))) {
+      printf("ERROR: Failed to build string value\n");
+      return NULL;
+    }
 
-  for (std::sregex_iterator i = words_begin; i != words_end; ++i) {
-    std::smatch groups;
-    std::string match_item = (*i).str();
-
-    if (std::regex_match(match_item, groups, expression)) {
-      PyObject* key = NULL;
-      std::string key_string = groups[1].str();
-
-      if (!(key = Py_BuildValue("s", key_string.c_str()))) {
-        printf("ERROR: Failed to build string value\n");
+    PyObject* value = NULL;
+    std::string value_string = m[2].str();
+    if (value_string[0] == '"') {
+      if (!(value = Py_BuildValue("s", value_string.substr(1, value_string.size() - 2).c_str()))) {
+        printf("ERROR: Failed to build integer value\n");
         return NULL;
       }
-
-      PyObject* value = NULL;
-      std::string value_string = groups[2].str();
-      if (value_string[0] == '"') {
-        if (!(value =
-                  Py_BuildValue("s", value_string.substr(1, value_string.size() - 2).c_str()))) {
-          printf("ERROR: Failed to build integer value\n");
-          return NULL;
-        }
-      } else {
-        if (!(value = Py_BuildValue("i", std::stoi(value_string)))) {
-          printf("ERROR: Failed to build integer value\n");
-          return NULL;
-        }
-      }
-
-      if (PyDict_SetItem(dict, key, value) < 0) {
-        printf("ERROR: Failed to set item\n");
+    } else {
+      if (!(value = Py_BuildValue("i", std::stoi(value_string)))) {
+        printf("ERROR: Failed to build integer value\n");
         return NULL;
       }
     }
+
+    if (PyDict_SetItem(dict, key, value) < 0) {
+      printf("ERROR: Failed to set item\n");
+      return NULL;
+    }
   }
+
   return dict;
 };
 

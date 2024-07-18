@@ -6,13 +6,13 @@
 #include "string_utils.hpp"
 
 /*
-==== default json.dumps: 0.965908716 s
-==== pip ujson.dumps: 0.652567924 s
-==== module cjson.dumps: 0.913523984 s
+==== default json.dumps: 0.997155254 s
+==== pip ujson.dumps: 0.657354489 s
+==== module cjson.dumps: 0.839450167 s
 -----------------------------------------
-==== default json.loads: 0.000206379 s
-==== pip ujson.loads: 0.000196861 s
-==== module cjson.loads: 0.00176672 s
+==== default json.loads: 0.000236065 s
+==== pip ujson.loads: 0.000177374 s
+==== module cjson.loads: 0.0058808 s
 */
 
 static PyObject* parse_pair(PyObject* dict, std::string& pair) {

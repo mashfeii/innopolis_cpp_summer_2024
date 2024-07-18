@@ -1,4 +1,4 @@
-cjson==0.0.1
+cjson==0.0.2
 exceptiongroup==1.2.2
 Faker==26.0.0
 iniconfig==2.0.0
