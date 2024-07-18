@@ -40,7 +40,7 @@ def main():
     print("==== module cjson.dumps: ", end='')
     print(f"{time_dumps(cjson.dumps, test_dict)} s")
 
-    print("------------------------------------------------------------")
+    print("-----------------------------------------")
 
     print("==== default json.loads: ", end='')
     print(f"{time_dumps(json.loads, json_str)} s")

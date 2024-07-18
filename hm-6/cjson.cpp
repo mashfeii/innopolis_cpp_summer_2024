@@ -5,6 +5,16 @@
 #include <string>
 #include "string_utils.hpp"
 
+/*
+==== default json.dumps: 0.965908716 s
+==== pip ujson.dumps: 0.652567924 s
+==== module cjson.dumps: 0.913523984 s
+-----------------------------------------
+==== default json.loads: 0.000206379 s
+==== pip ujson.loads: 0.000196861 s
+==== module cjson.loads: 0.00176672 s
+*/
+
 static PyObject* parse_pair(PyObject* dict, std::string& pair) {
   trim(pair);
 
